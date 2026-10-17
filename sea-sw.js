@@ -1,0 +1,10 @@
+const VERSION='v1';
+const BASE=new URL('./',self.location.href);
+const PREFIX='sea-motion-offline-'+BASE.pathname+'-';
+const CACHE=PREFIX+VERSION;
+const PAGE=new URL('cruise.html',BASE).href;
+const ASSETS=['cruise.html','sea-motion.webmanifest','sea-icon-192.png','sea-icon-512.png'].map(p=>new URL(p,BASE).href);
+self.addEventListener('install',event=>event.waitUntil((async()=>{const c=await caches.open(CACHE);await c.addAll(ASSETS.map(p=>new Request(p,{cache:'reload'})));await self.skipWaiting()})()));
+self.addEventListener('activate',event=>event.waitUntil((async()=>{const names=await caches.keys();await Promise.all(names.filter(n=>n.startsWith(PREFIX)&&n!==CACHE).map(n=>caches.delete(n)));await self.clients.claim()})()));
+self.addEventListener('message',event=>{if(event.data?.type!=='OFFLINE_STATUS')return;event.waitUntil((async()=>{try{const c=await caches.open(CACHE),found=await Promise.all(ASSETS.map(p=>c.match(p)));event.ports[0]?.postMessage({ready:found.every(Boolean),version:VERSION})}catch{event.ports[0]?.postMessage({ready:false})}})())});
+self.addEventListener('fetch',event=>{if(event.request.method!=='GET')return;const url=new URL(event.request.url),key=url.origin+url.pathname;if(!ASSETS.includes(key))return;event.respondWith((async()=>{const c=await caches.open(CACHE);if(key===PAGE){try{const response=await fetch(event.request);if(!response.ok)throw Error('Unavailable');event.waitUntil(c.put(PAGE,response.clone()).catch(()=>{}));return response}catch{return await c.match(PAGE)||Response.error()}}return await c.match(key)||fetch(event.request)})())});
